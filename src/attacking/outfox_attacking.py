@@ -1,11 +1,8 @@
 import random
 random.seed(42)
-import openai
 import os
 from tqdm import tqdm
-from utils.utils import load_pkl, save_pkl, generation_by_chatgpt, identify_attack_label, make_prompt_for_attack
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from utils.utils import load_pkl, save_pkl, generation_by_ollama, identify_attack_label, make_prompt_for_attack
 
 
 def make_attacked_test(test_humans, test_problem_statements, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train):
@@ -20,7 +17,7 @@ def make_attacked_test(test_humans, test_problem_statements, test_ps_to_near_ps_
         assert len(lm_and_attack_labels) == 10, 'invalid size of lm_and_attack_labels'
         random.shuffle(lm_and_attack_labels)
         prompt, human_essay_tokens = make_prompt_for_attack(lm_and_attack_labels, test_ps, test_human)
-        attacked_essay = generation_by_chatgpt(prompt, human_essay_tokens)
+        attacked_essay = generation_by_ollama(prompt, temperature=1.3, top_p=1)
         attacked_test.append(attacked_essay)
     
     return attacked_test

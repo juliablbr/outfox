@@ -1,14 +1,11 @@
 import random
 random.seed(42)
-import openai
 from tqdm import tqdm
 import time
 import os
 import argparse
 from src.attacking.dipper_attacking import DipperParaphraser
-from utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, completions_with_backoff, generation_by_chatgpt, identify_attack_label, make_prompt_for_detection, make_prompt_for_attack, compute_metrics
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
+from utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, identify_attack_label, make_prompt_for_detection, make_prompt_for_attack, compute_metrics
 
 
 def identify_attack_labels_of_lms_from_train(lm_pss_train, train_ps_to_near_ps_human_lm_pairs_from_train):
@@ -28,7 +25,7 @@ def create_attack(train_ps, human_text, lm_text, train_ps_to_near_ps_human_lm_pa
         # detection to make in-context examples for outfox attacker
         lm_and_attack_labels = identify_attack_labels_of_lms_from_train(ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train)
         prompt, human_essay_tokens = make_prompt_for_attack(lm_and_attack_labels, train_ps, human_text)
-        attacked_essay = generation_by_chatgpt(prompt, human_essay_tokens)
+        attacked_essay = generation_by_ollama(prompt)
     # considering DIPPER attack
     elif attacking_method == 'paraphrase':
         attacked_essay = dp.paraphrase(lm_text, lex_diversity=60, order_diversity=60, prefix='', do_sample=True, top_p=0.75, top_k=None, max_length=4096)
@@ -53,17 +50,11 @@ def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_
         example_for_detection = test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5]
         example_for_detection_considering_attack = replace_some_llms_with_attacks(example_for_detection, train_ps_to_near_ps_human_lm_pairs_from_train, dp, attacking_method)
         prompt = make_prompt_for_detection(text, example_for_detection_considering_attack)
-        while 1:
-            try:
-                res = completions_with_backoff(model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], temperature=0, top_p=0)
-                pred = process_reply_from_chatgpt(res)
-                preds.append(pred)
-                with open(preds_path, 'a') as f_pred:
-                    f_pred.write(f"{pred}\n")
-                break
-            except:
-                time.sleep(1)
-                continue
+        res = generation_by_ollama(prompt, temperature=0, top_p=0)
+        pred = process_reply_from_chatgpt(res)
+        preds.append(pred)
+        with open(preds_path, 'a') as f_pred:
+            f_pred.write(f"{pred}\n")
     return preds
 
 

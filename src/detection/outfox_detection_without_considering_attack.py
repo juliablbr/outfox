@@ -1,30 +1,20 @@
 import random
 random.seed(42)
-import openai
 from tqdm import tqdm
 import time
 import os
 import argparse
-from utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, completions_with_backoff, make_prompt_for_detection, compute_metrics
-
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
+from utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
 
 def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
     preds = []
     for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Processing Detection...'):
         prompt = make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5])
-        while 1:
-            try:
-                res = completions_with_backoff(model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], temperature=0, top_p=0)
-                pred = process_reply_from_chatgpt(res)
-                preds.append(pred)
-                with open(preds_path, 'a') as f_pred:
-                    f_pred.write(f"{pred}\n")
-                break
-            except:
-                time.sleep(1)
-                continue
+        res = generation_by_ollama(prompt, temperature=0, top_p=0)
+        pred = process_reply_from_chatgpt(res)
+        preds.append(pred)
+        with open(preds_path, 'a') as f_pred:
+            f_pred.write(f"{pred}\n")
     return preds
 
 

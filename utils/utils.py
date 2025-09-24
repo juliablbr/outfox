@@ -3,8 +3,7 @@ from numpy.linalg import norm
 import pickle
 import json
 import random
-import backoff
-import openai
+import ollama
 import torch
 import tiktoken
 import time
@@ -63,23 +62,17 @@ def make_mixed_data(human_path, lm_path, ps_path):
     pss = [t[2] for t in all_with_label_ps]
     return (data, labels, pss)
 
+def generation_by_ollama(prompt, model='gemma3:1b', *, system_prompt=None, **kwargs):
+    messages = [] if system_prompt is None else [{'role': 'system', 'content': system_prompt}]
+    messages.append({'role': 'user', 'content': prompt})
 
-@backoff.on_exception(backoff.expo, openai.error.RateLimitError, max_time=60, max_tries=5)
-def completions_with_backoff(**kwargs):
-    res = openai.ChatCompletion.create(**kwargs)
-    return res["choices"][0]["message"]["content"]
+    response = ollama.chat(
+        model=model,
+        messages=messages,
+        options=kwargs if kwargs else None,
+    )
 
-
-def generation_by_chatgpt(prompt, human_essay_tokens):
-    lm_essay = ''
-    while 1:
-        try:
-            lm_essay = completions_with_backoff(model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], temperature=1.3, top_p=1, max_tokens=human_essay_tokens+50)
-            break
-        except:
-            time.sleep(3)
-            continue
-    return lm_essay
+    return response.message.content
 
 
 def make_prompt_for_detection(target_text, pairs):
@@ -126,15 +119,7 @@ def identify_attack_label(ps, lm, train_ps_to_near_ps_human_lm_pairs_from_train)
     ps_human_lm_train = train_ps_to_near_ps_human_lm_pairs_from_train[ps]
     human_lm_train = [(human, lm) for ps, human, lm in ps_human_lm_train]
     prompt = make_prompt_for_detection(lm, human_lm_train[:5])
-    try_num = 0
-    while 1:
-        try:
-            print(f'Try: {try_num} Start detection for attack labels.')
-            res = completions_with_backoff(model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}], temperature=0, top_p=0)
-            break
-        except:
-            try_num += 1
-            continue
+    res = generation_by_ollama(prompt, temperature=0, top_p=0)
     pred = process_reply_from_chatgpt(res)
     return (ps, lm, 'Good' if pred == '0' else 'Bad')
 
