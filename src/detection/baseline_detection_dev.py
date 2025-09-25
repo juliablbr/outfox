@@ -320,7 +320,7 @@ def get_perturbation_results(span_length=2, n_perturbations=100):
             }
         )
     
-    with open('../../data/flan_t5_xxl/valid/valid_perturbed_results.pkl', 'wb') as f:
+    with open('data/flan_t5_xxl/valid/valid_perturbed_results.pkl', 'wb') as f:
         pickle.dump(results, f)
 
     load_base_model()
@@ -498,7 +498,7 @@ if __name__ == "__main__":
 
     ## Preparing essay data to be detected ##
     data = dict()
-    with open(f'../../data/common/valid/valid_contexts.pkl', 'rb') as fa, open(f'../../data/{args.base_model_name}/valid/valid_lms.pkl', 'rb') as fb, open('../../data/common/valid/valid_humans.pkl', 'rb') as fc:
+    with open(f'data/common/valid/valid_contexts.pkl', 'rb') as fa, open(f'data/{args.base_model_name}/valid/valid_lms.pkl', 'rb') as fb, open('data/common/valid/valid_humans.pkl', 'rb') as fc:
         data['input'] = pickle.load(fa)
         data['sampled'] = pickle.load(fb)
         data['original'] = pickle.load(fc)

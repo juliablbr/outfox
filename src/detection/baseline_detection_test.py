@@ -300,7 +300,7 @@ def get_perturbation_results_(span_length=10, n_perturbations=1, n_samples=500):
             }
         )
 
-    with open('../../data/flan_t5_xxl/test/essay_test_perturbed_results.pkl', 'wb') as f:
+    with open('data/flan_t5_xxl/test/essay_test_perturbed_results.pkl', 'wb') as f:
         pickle.dump(results, f)
 
     load_base_model()
@@ -399,7 +399,7 @@ def run_baseline_threshold_experiment_(criterion_fn, name, n_samples=500):
 
 def mixed_human_lm_dataset(base_model_name):
     random.seed(42)
-    with open('../../data/common/test/test_humans.pkl', 'rb') as fa, open(f'../../data/{base_model_name}/test/test_lms.pkl', 'rb') as fb, open(f'../../data/common/test/test_contexts.pkl', 'rb') as fc:
+    with open('data/common/test/test_humans.pkl', 'rb') as fa, open(f'data/{base_model_name}/test/test_lms.pkl', 'rb') as fb, open(f'data/common/test/test_contexts.pkl', 'rb') as fc:
         human_texts = pickle.load(fa)
         lm_texts = pickle.load(fb)
         contexts = pickle.load(fc)
@@ -498,7 +498,7 @@ if __name__ == "__main__":
     print('Loading target essays to be detected...')
     all_data = mixed_human_lm_dataset(args.base_model_name)
 
-    fixed_threshold = json2dict(f'../../config/{args.base_model_name}_essay_threshold_config.json')
+    fixed_threshold = json2dict(f'config/{args.base_model_name}_essay_threshold_config.json')
 
     if args.base_model_name == 'flan_t5_xxl':
         # Statistical Outlier Approaches
