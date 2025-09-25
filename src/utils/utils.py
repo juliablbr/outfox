@@ -8,8 +8,8 @@ import tiktoken
 import time
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-from ollama import Ollama
-ollama = Ollama()
+from ollama import OLLaMA
+ollama = OLLaMA()
 
 print('Loading tiktoken tokenizer...')
 gpt_turbo_encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
