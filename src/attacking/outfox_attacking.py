@@ -2,7 +2,8 @@ import random
 random.seed(42)
 import os
 from tqdm import tqdm
-from utils.utils import load_pkl, save_pkl, generation_by_ollama, identify_attack_label, make_prompt_for_attack
+# import utils
+from src.utils.utils import load_pkl, save_pkl, generation_by_ollama, identify_attack_label, make_prompt_for_attack
 
 
 def make_attacked_test(test_humans, test_problem_statements, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train):

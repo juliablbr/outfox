@@ -1,8 +1,8 @@
-cd ../src/attacking
+cd ../
 # OUTFOX attack
-python outfox_attacking.py
+python -m src.attacking.outfox_attacking
 
 # DIPPER attack on various models
-python dipper_attacking.py --model_name chatgpt
-python dipper_attacking.py --model_name flan_t5_xxl
-python dipper_attacking.py --model_name text_davinci_003
+python -m src.attacking.dipper_attacking --model_name chatgpt
+python -m src.attacking.dipper_attacking --model_name flan_t5_xxl
+python -m src.attacking.dipper_attacking --model_name text_davinci_003

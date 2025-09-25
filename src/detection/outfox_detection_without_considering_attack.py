@@ -4,7 +4,7 @@ from tqdm import tqdm
 import time
 import os
 import argparse
-from utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
+from src.utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
 
 def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
     preds = []

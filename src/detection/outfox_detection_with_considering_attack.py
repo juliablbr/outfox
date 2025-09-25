@@ -5,7 +5,7 @@ import time
 import os
 import argparse
 from src.attacking.dipper_attacking import DipperParaphraser
-from utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, identify_attack_label, make_prompt_for_detection, make_prompt_for_attack, compute_metrics
+from src.utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, identify_attack_label, make_prompt_for_detection, make_prompt_for_attack, compute_metrics
 
 
 def identify_attack_labels_of_lms_from_train(lm_pss_train, train_ps_to_near_ps_human_lm_pairs_from_train):

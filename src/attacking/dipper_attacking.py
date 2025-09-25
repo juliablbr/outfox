@@ -4,7 +4,8 @@ from nltk.tokenize import sent_tokenize
 import torch
 from tqdm import tqdm
 import argparse
-from utils.utils import load_pkl, save_pkl
+# import utils
+from src.utils.utils import load_pkl, save_pkl
 
 
 class DipperParaphraser(object):
