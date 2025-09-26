@@ -3,6 +3,7 @@
 import argparse
 import json
 import re
+import pickle
 
 class Processor:
     def __init__(self, problem_statement):
@@ -34,7 +35,14 @@ def process_main(args: argparse.Namespace):
         raise NotImplementedError
 
 def merge_main(args: argparse.Namespace):
-    pass
+    merged_list = []
+    for path in args.input: 
+        with open(path, 'rb') as file: 
+            loaded_data = pickle.load(file)
+            merged_list += loaded_data
+
+    with open(args.output, 'wb') as new_file:
+        pickle.dump(merged_list, new_file)
 
 def main(args: argparse.Namespace):
     if args.mode == 'process':
@@ -55,7 +63,7 @@ def get_args() -> argparse.Namespace:
 
     merge_parser = subparsers.add_parser('merge', help="merges all your pickle into one big pickle")
     merge_parser.add_argument('output', type=str, help="output .pkl")
-    merge_parser.add_argument('input', type=str, nargs='+', help="input .pkl")
+    merge_parser.add_argument('input', type=str, nargs='+', help="data/input .pkl")
 
     return parser.parse_args()
 
