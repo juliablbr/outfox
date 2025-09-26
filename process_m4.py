@@ -95,7 +95,7 @@ def get_args() -> argparse.Namespace:
     merge_parser.add_argument('output', type=str, help="output .pkl")
     merge_parser.add_argument('input', type=str, nargs='+', help="data/input .pkl")
     merge_parser.add_argument('--shuffle', type=int, metavar='SEED', help="shuffle the combined files with a given random seed")
-    merge_parser.add_argument('--split', type=str, help="define test-val-test split, e.g 94/3/3")
+    merge_parser.add_argument('--split', type=str, default='94/3/3', help="define test-val-test split, e.g 94/3/3")
 
 
     return parser.parse_args()
