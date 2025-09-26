@@ -20,7 +20,7 @@ class Processor:
 
     def build_problem_statement(self, prompt):
         match = self.problem_statement_regex.search(prompt)
-        assert match is not None, "unable to match regex to the prompt"
+        assert match is not None, f"unable to match regex to the prompt: {prompt}"
         return match.expand(self.problem_statement_template)
 
 def process_main(args: argparse.Namespace):
