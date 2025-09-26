@@ -4,6 +4,7 @@ import argparse
 import pickle
 import json
 import re
+import random
 import pickle
 
 class Processor:
@@ -47,6 +48,10 @@ def merge_main(args: argparse.Namespace):
             loaded_data = pickle.load(file)
             merged_list += loaded_data
 
+    if args.shuffle is not None:
+        random.seed(args.shuffle)
+        random.shuffle(merged_list)
+
     with open(args.output, 'wb') as new_file:
         pickle.dump(merged_list, new_file)
 
@@ -70,6 +75,7 @@ def get_args() -> argparse.Namespace:
     merge_parser = subparsers.add_parser('merge', help="merges all your pickle into one big pickle")
     merge_parser.add_argument('output', type=str, help="output .pkl")
     merge_parser.add_argument('input', type=str, nargs='+', help="data/input .pkl")
+    merge_parser.add_argument('--shuffle', type=int, metavar='SEED', help="shuffle the combined files with a given random seed")
 
     return parser.parse_args()
 

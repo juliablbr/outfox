@@ -3,6 +3,7 @@ set -e
 
 OUTPUT_DIR="m4_pickles"
 M4_DIR="../M4/data"
+SEED=42
 
 mkdir -p "$OUTPUT_DIR/individual"
 
@@ -18,6 +19,6 @@ mkdir -p "$OUTPUT_DIR/individual"
 ./process_m4.py process --output "$OUTPUT_DIR/individual/arxiv_%ss.pkl" $M4_DIR/arxiv_chatGPT.jsonl \
 	--problem_statement "title: ([^.]+)" 'Write an abstract about the topic \1'
 
-./process_m4.py merge "$OUTPUT_DIR/combined_problem_statements.pkl" "$OUTPUT_DIR"/individual/*_problem_statements.pkl
-./process_m4.py merge "$OUTPUT_DIR/combined_humans.pkl" "$OUTPUT_DIR"/individual/*_humans.pkl
-./process_m4.py merge "$OUTPUT_DIR/combined_lms.pkl" "$OUTPUT_DIR"/individual/*_lms.pkl
+./process_m4.py merge --shuffle $SEED "$OUTPUT_DIR/combined_problem_statements.pkl" "$OUTPUT_DIR"/individual/*_problem_statements.pkl
+./process_m4.py merge --shuffle $SEED "$OUTPUT_DIR/combined_humans.pkl" "$OUTPUT_DIR"/individual/*_humans.pkl
+./process_m4.py merge --shuffle $SEED "$OUTPUT_DIR/combined_lms.pkl" "$OUTPUT_DIR"/individual/*_lms.pkl
