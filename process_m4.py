@@ -52,8 +52,24 @@ def merge_main(args: argparse.Namespace):
         random.seed(args.shuffle)
         random.shuffle(merged_list)
 
-    with open(args.output, 'wb') as new_file:
-        pickle.dump(merged_list, new_file)
+    # train-val-test split where the val and test sets are 500 samples
+    train_list = merged_list[:10995]
+    val_list = merged_list[10995:11495]
+    test_list = merged_list[11495:]
+    # print(len(train_list))
+    # print(len(val_list))
+    # print(len(test_list))
+
+    # with open(args.output, 'wb') as new_file:
+    #     pickle.dump(merged_list, new_file)
+    with open(args.output.replace('%s', 'train'), 'wb') as train_file:
+        pickle.dump(train_list, train_file)
+
+    with open(args.output.replace('%s', 'val'), 'wb') as val_file:
+        pickle.dump(val_list, val_file)
+
+    with open(args.output.replace('%s', 'test'), 'wb') as test_file:
+        pickle.dump(test_list, test_file)
 
 def main(args: argparse.Namespace):
     if args.mode == 'process':
