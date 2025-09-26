@@ -52,10 +52,15 @@ def merge_main(args: argparse.Namespace):
         random.seed(args.shuffle)
         random.shuffle(merged_list)
 
+    list_splits = args.split
+    train_split = (list_splits[0] / 100) * len(merged_list)
+    val_split = (list_splits[1] / 100) * len(merged_list)
+    test_split = (list_splits[2] / 100) * len(merged_list)
+
     # train-val-test split where the val and test sets are 500 samples
-    train_list = merged_list[:10995]
-    val_list = merged_list[10995:11495]
-    test_list = merged_list[11495:]
+    train_list = merged_list[:train_split]
+    val_list = merged_list[train_split:train_split+val_split]
+    test_list = merged_list[train_split+val_split:]
     # print(len(train_list))
     # print(len(val_list))
     # print(len(test_list))
@@ -92,6 +97,8 @@ def get_args() -> argparse.Namespace:
     merge_parser.add_argument('output', type=str, help="output .pkl")
     merge_parser.add_argument('input', type=str, nargs='+', help="data/input .pkl")
     merge_parser.add_argument('--shuffle', type=int, metavar='SEED', help="shuffle the combined files with a given random seed")
+    merge_parser.add_argument('--split', type=list, help="list of test-val-test split, e.g [94,3,3]")
+
 
     return parser.parse_args()
 
