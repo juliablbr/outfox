@@ -4,6 +4,7 @@ from tqdm import tqdm
 import time
 import os
 import argparse
+from pathlib import Path
 from src.utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
 
 def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
@@ -24,8 +25,10 @@ def main():
     args = parser.parse_args()
 
     model_name = args.model_name
-
-    preds_path = 'results/outfox_detection/without_considering_attack_{model_name}.log'
+    
+    preds_folder = Path("results", "outfox_detection")
+    preds_folder.mkdir(parents=True, exist_ok=True)
+    preds_path = preds_folder / f"without_considering_attack_{model_name}.log"
 
     test_data, test_labels, mixed_test_pss = make_mixed_data(f'data/common/test/test_humans.pkl', f'data/{model_name}/test/test_lms.pkl', f'data/common/test/test_problem_statements.pkl')
     
