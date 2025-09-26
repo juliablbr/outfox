@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import pickle
 import json
 import re
 import pickle
@@ -13,8 +14,8 @@ class Processor:
     def __call__(self, obj):
         return {
             'problem_statement': self.build_problem_statement(obj['prompt']),
-            'human_text': obj['human_text'],
-            'machine_text': obj['machine_text'],
+            'human': obj['human_text'],
+            'lm': obj['machine_text'],
         }
 
     def build_problem_statement(self, prompt):
@@ -32,7 +33,12 @@ def process_main(args: argparse.Namespace):
         for datum in data:
             print(json.dumps(datum))
     else:
-        raise NotImplementedError
+        assert '%s' in args.output, "no '%s' in output path"
+        assert len(data) > 0, "no data"
+
+        for key in data[0].keys():
+            with open(args.output.replace('%s', key), 'wb') as pkl:
+                pickle.dump([datum[key] for datum in data], pkl)
 
 def merge_main(args: argparse.Namespace):
     merged_list = []
