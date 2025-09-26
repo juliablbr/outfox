@@ -52,14 +52,18 @@ def merge_main(args: argparse.Namespace):
         random.seed(args.shuffle)
         random.shuffle(merged_list)
 
-    train_split = int((args.split[0] / sum(args.split)) * len(merged_list))
-    val_split = int((args.split[1] / args.split) * len(merged_list))
+    data_split_num = list(map(int, args.split.split('/')))
+    train_split = int((data_split_num[0] / sum(data_split_num)) * len(merged_list))
+    val_split = int((data_split_num[1] / sum(data_split_num)) * len(merged_list))
     # test_split = (args.split[2] / args.split) * len(merged_list)
 
     # train-val-test split 
     train_list = merged_list[:train_split]
     val_list = merged_list[train_split:train_split+val_split]
     test_list = merged_list[train_split+val_split:]
+    # print(len(train_list))
+    # print(len(val_list))
+    # print(len(test_list))
 
     with open(args.output.replace('%s', 'train'), 'wb') as train_file:
         pickle.dump(train_list, train_file)
@@ -91,7 +95,7 @@ def get_args() -> argparse.Namespace:
     merge_parser.add_argument('output', type=str, help="output .pkl")
     merge_parser.add_argument('input', type=str, nargs='+', help="data/input .pkl")
     merge_parser.add_argument('--shuffle', type=int, metavar='SEED', help="shuffle the combined files with a given random seed")
-    merge_parser.add_argument('--split', type=list, help="list of test-val-test split, e.g [94,3,3]")
+    merge_parser.add_argument('--split', type=str, help="define test-val-test split, e.g 94/3/3")
 
 
     return parser.parse_args()
