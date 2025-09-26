@@ -1,6 +1,7 @@
 import random
 random.seed(42)
 from tqdm import tqdm
+import asyncio
 import time
 import os
 import argparse
@@ -9,13 +10,22 @@ from src.utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_dat
 
 def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
     preds = []
-    for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Processing Detection...'):
-        prompt = make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5])
-        res = generation_by_ollama(prompt, temperature=0, top_p=0)
-        pred = process_reply_from_chatgpt(res)
-        preds.append(pred)
-        with open(preds_path, 'a') as f_pred:
+    prompts = []
+    for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Creating prompts...'):
+        prompts.append(make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5]))
+    
+    print("Starting responses")
+    responses = asyncio.run(generation_by_ollama(prompts, temperature=0, top_p=0))
+    print("Done with responses")
+    predictions = []
+    for response in responses:
+        prediction = process_reply_from_chatgpt(response)
+        prediction.append(predictions)
+
+    with open(preds_path, 'a') as f_pred:
+        for pred in predictions:
             f_pred.write(f"{pred}\n")
+
     return preds
 
 

@@ -9,6 +9,9 @@ import time
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import ollama
+import asyncio
+from ollama import AsyncClient
+from tqdm import tqdm
 
 print('Loading tiktoken tokenizer...')
 gpt_turbo_encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
@@ -62,16 +65,47 @@ def make_mixed_data(human_path, lm_path, ps_path):
     pss = [t[2] for t in all_with_label_ps]
     return (data, labels, pss)
 
-def generation_by_ollama(prompt, model='gemma3:1b', *, system_prompt=None, **kwargs):
-    messages = [] if system_prompt is None else [{'role': 'system', 'content': system_prompt}]
-    messages.append({'role': 'user', 'content': prompt})
+async def generation_by_ollama(prompts, model='gemma3:270m', **kwargs):
+    progress_bar = tqdm(total=len(prompts), desc="Generating the ollama responses...", position=0)
+    workercount = 2
+    # We append a bunch of None values to preserve order
+    results = [None] * len(prompts)
+    # Create async queue with all Messages (prompts)
+    task_queue = asyncio.Queue()
+    for idx, message in enumerate(prompts):
+        task_queue.put_nowait((idx, message))
 
-    response = ollama.chat(
+    tasks = []
+    for _ in range(workercount):
+        task = asyncio.create_task(worker(model, task_queue, results, progress_bar, **kwargs))
+        tasks.append(task)
+    
+    await task_queue.join()
+    
+    for task in tasks:
+        task.cancel()
+    
+    # Await the completion of all worker tasks
+    await asyncio.gather(*tasks)
+
+    progress_bar.close()
+
+    return results
+
+async def worker(model, task_queue, results, progress_bar, **kwargs):
+    while not task_queue.empty():
+        idx, message = await task_queue.get()
+        response = await start_ollama_chat(message, model, **kwargs)
+        results[idx] = response
+        progress_bar.update(1)
+        task_queue.task_done()
+
+async def start_ollama_chat(message, model, **kwargs):
+    response = await AsyncClient().chat(
         model=model,
-        messages=messages,
+        messages=[{"role": "user", "content": f"{message}"}],
         options=kwargs if kwargs else None,
     )
-
     return response.message.content
 
 
