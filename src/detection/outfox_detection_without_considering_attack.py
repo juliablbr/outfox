@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import random
 random.seed(42)
 from tqdm import tqdm
@@ -6,33 +7,49 @@ import time
 import os
 import argparse
 from pathlib import Path
-from src.utils.utils import load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
+from src.utils.utils import OllamaHostConfig, load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
 
-def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
+
+def detection_by_chatgpt(ollama_host_config: OllamaHostConfig, test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
     preds = []
     prompts = []
     for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Creating prompts...'):
         prompts.append(make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5]))
     
     print("Starting responses")
-    responses = asyncio.run(generation_by_ollama(prompts, temperature=0, top_p=0))
+    responses = asyncio.run(generation_by_ollama(ollama_host_config, prompts, temperature=0, top_p=0))
     print("Done with responses")
     predictions = []
     for response in responses:
         prediction = process_reply_from_chatgpt(response)
-        prediction.append(predictions)
+        predictions.append(prediction)
 
-    with open(preds_path, 'a') as f_pred:
+    with open(preds_path, 'w') as f_pred:
         for pred in predictions:
             f_pred.write(f"{pred}\n")
 
     return preds
 
 
+
 def main():
     parser = argparse.ArgumentParser(description='outfox_detection_without_considering_attacks')
     parser.add_argument('--model_name', help='Specify target llms to be detected.', required=True, choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
+    parser.add_argument("--detection_model", type=str, default="gemma3:270m", help="The model name of the detection model")
+    parser.add_argument("--parallel_per_host", type=int, default=1, help="The number of request each host/server is allowed to handle parallel")
+    parser.add_argument("--n_hosts", type=int, default=1, help="The number of hosts/servers will be used")
+    parser.add_argument("--host_ip", type=str, default="127.0.0.1", help="The ip of all hosts")
+    parser.add_argument("--host_start_port", type=int, default=11434)
+
     args = parser.parse_args()
+
+    ollama_host_config = OllamaHostConfig(
+        args.detection_model,
+        args.parallel_per_host,
+        args.n_hosts,
+        args.host_ip,
+        args.host_start_port,
+    )
 
     model_name = args.model_name
     
@@ -46,7 +63,7 @@ def main():
     # Loading top-k (problem statement, human-written essay, LLM-generated essay) sets retrieved in advance based on the problem statement, using tf-idf.
     # Whatever LMs (FLAN, GPT-3.5) to be detected, our OUTFOX detector consider the essays by ChatGPT.
     test_ps_to_near_ps_human_lm_pairs_from_train = load_pkl('data/chatgpt/util/test_ps_to_near_ps_human_lm_pairs_from_train.pkl')
-    preds = detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path)
+    preds = detection_by_chatgpt(ollama_host_config, test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path)
 
     human_rec, machine_rec, avg_rec, acc, precision, recall, f1 = compute_metrics(test_labels, preds)
     print(f"HumanRec: {human_rec}, MachineRec: {machine_rec}, AvgRec: {avg_rec}, Acc:{acc}, Precision:{precision}, Recall:{recall}, F1:{f1}")
