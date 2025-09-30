@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from numpy import dot
 from numpy.linalg import norm
 import pickle
@@ -15,6 +16,15 @@ from tqdm import tqdm
 
 print('Loading tiktoken tokenizer...')
 gpt_turbo_encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
+
+
+@dataclass
+class OllamaHostConfig:
+    model_name: str
+    parallel_requests_per_host: int
+    number_of_hosts: int
+    host_ip: str
+    host_start_port: int
 
 
 def load_pkl(path):
@@ -63,11 +73,11 @@ def make_mixed_data(human_path, lm_path, ps_path):
     data = [t[0] for t in all_with_label_ps]
     labels = [t[1] for t in all_with_label_ps]
     pss = [t[2] for t in all_with_label_ps]
-    return (data, labels, pss)
+    return (data, labels, pss)  
 
-async def generation_by_ollama(prompts, model='gemma3:270m', **kwargs):
+
+async def generation_by_ollama(ollama_host_config: OllamaHostConfig, prompts, **kwargs):
     progress_bar = tqdm(total=len(prompts), desc="Generating the ollama responses...", position=0)
-    workercount = 2
     # We append a bunch of None values to preserve order
     results = [None] * len(prompts)
     # Create async queue with all Messages (prompts)
@@ -76,8 +86,17 @@ async def generation_by_ollama(prompts, model='gemma3:270m', **kwargs):
         task_queue.put_nowait((idx, message))
 
     tasks = []
-    for _ in range(workercount):
-        task = asyncio.create_task(worker(model, task_queue, results, progress_bar, **kwargs))
+    host_start_port = ollama_host_config.host_start_port
+    n_hosts = ollama_host_config.number_of_hosts
+    parallel_requests = ollama_host_config.parallel_requests_per_host
+
+    worker_count = n_hosts * parallel_requests
+    for i in range(worker_count):
+        host_port = host_start_port + (i // parallel_requests)
+        host = f"{ollama_host_config.host_ip}:{host_port}"
+        print(f"Worker {i} on host {host}")
+
+        task = asyncio.create_task(worker(ollama_host_config.model_name, task_queue, results, host, progress_bar, **kwargs))
         tasks.append(task)
     
     await task_queue.join()
@@ -87,21 +106,24 @@ async def generation_by_ollama(prompts, model='gemma3:270m', **kwargs):
     
     # Await the completion of all worker tasks
     await asyncio.gather(*tasks)
-
     progress_bar.close()
 
     return results
 
-async def worker(model, task_queue, results, progress_bar, **kwargs):
-    while not task_queue.empty():
-        idx, message = await task_queue.get()
-        response = await start_ollama_chat(message, model, **kwargs)
-        results[idx] = response
-        progress_bar.update(1)
-        task_queue.task_done()
+async def worker(model, task_queue, results, host, progress_bar, **kwargs):
+    try:
+        while not task_queue.empty():
+            idx, message = await task_queue.get()
+            response = await start_ollama_chat(message, model, host, **kwargs)
+            results[idx] = response
+            progress_bar.update(1)
+            task_queue.task_done()
+    except asyncio.CancelledError:
+        print("asyncio.CancelledError")
+        return
 
-async def start_ollama_chat(message, model, **kwargs):
-    response = await AsyncClient().chat(
+async def start_ollama_chat(message, model, host, **kwargs):
+    response = await AsyncClient(host=host).chat(
         model=model,
         messages=[{"role": "user", "content": f"{message}"}],
         options=kwargs if kwargs else None,
