@@ -3,28 +3,36 @@ random.seed(42)
 import os
 from tqdm import tqdm
 # import utils
-from src.utils.utils import load_pkl, save_pkl, generation_by_ollama, identify_attack_label, make_prompt_for_attack
+from src.utils.utils import OutfoxDetectionLLM, parse_outfox_args, generation_by_vllm, load_pkl, save_pkl, identify_attack_label, make_prompt_for_attack
 
 
-def make_attacked_test(test_humans, test_problem_statements, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train):
+def make_attacked_test(llm, test_humans, test_problem_statements, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train):
     attacked_test = []
     
     for test_human, test_ps in tqdm(zip(test_humans, test_problem_statements), total=len(test_humans)):
         example_for_detection = test_ps_to_near_ps_human_lm_pairs_from_train[test_ps]
         lm_and_attack_labels = []
         for train_ps, _, train_lm in tqdm(example_for_detection):
-            lm_and_attack_label = identify_attack_label(train_ps, train_lm, train_ps_to_near_ps_human_lm_pairs_from_train)
+            lm_and_attack_label = identify_attack_label(llm, train_ps, train_lm, train_ps_to_near_ps_human_lm_pairs_from_train)
             lm_and_attack_labels.append(lm_and_attack_label)
         assert len(lm_and_attack_labels) == 10, 'invalid size of lm_and_attack_labels'
         random.shuffle(lm_and_attack_labels)
         prompt, human_essay_tokens = make_prompt_for_attack(lm_and_attack_labels, test_ps, test_human)
-        attacked_essay = generation_by_ollama(prompt, temperature=1.3, top_p=1)
+        # This should have temperature 1.3 and top_p=1 if we want to mimic the paper, that was the original code. So probably add those values
+        # As command line arguments!
+        # temperature=1.3, top_p=1
+        attacked_essay = generation_by_vllm(prompt, llm, {
+            "temperature": 1.3,
+            "top_p": 1.0,
+            "max_tokens": human_essay_tokens+50
+        })[0]
         attacked_test.append(attacked_essay)
     
     return attacked_test
 
 
 def main():
+    args = parse_outfox_args().parse_args()
     test_humans = load_pkl('data/common/test/test_humans.pkl')
     test_problem_statements = load_pkl('data/common/test/test_problem_statements.pkl')
 
@@ -33,7 +41,8 @@ def main():
     test_ps_to_near_ps_human_lm_pairs_from_train = load_pkl(f'data/chatgpt/util/test_ps_to_near_ps_human_lm_pairs_from_train.pkl')
     train_ps_to_near_ps_human_lm_pairs_from_train = load_pkl(f'data/chatgpt/util/train_ps_to_near_ps_human_lm_pairs_from_train.pkl')
 
-    attacked_test = make_attacked_test(test_humans, test_problem_statements, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train)
+    llm = OutfoxDetectionLLM(args)
+    attacked_test = make_attacked_test(llm, test_humans, test_problem_statements, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train)
     save_pkl(attacked_test, f'data/chatgpt/test/test_outfox_attacks.pkl')
     print('Complete!')
 

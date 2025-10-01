@@ -4,21 +4,23 @@ import random
 from src.utils import ROOT
 random.seed(42)
 from tqdm import tqdm
-import asyncio
 import time
 import os
-import argparse
 from pathlib import Path
-from src.utils.utils import OllamaHostConfig, load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics, save_metrics, save_predictions
+from src.utils.utils import OutfoxDetectionLLM, parse_outfox_args, generation_by_vllm, load_pkl, process_reply_from_chatgpt, make_mixed_data, make_prompt_for_detection, compute_metrics, save_metrics, save_predictions
+from vllm.sampling_params import GuidedDecodingParams
 
-
-def detection_by_chatgpt(ollama_host_config: OllamaHostConfig, test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
+def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path, llm):
     prompts = []
     for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Creating prompts...'):
         prompts.append(make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5]))
     
     print("Starting detector")
-    responses = asyncio.run(generation_by_ollama(ollama_host_config, prompts, temperature=0, top_p=0))
+    responses = generation_by_vllm(prompts, llm, {
+        "guided_decoding": GuidedDecodingParams(choice=["LM", "Human"]),
+        "temperature": 0,
+        "top_p": 1.0
+    })
     print("Finished detection")
 
     save_predictions(preds_path, responses)
@@ -34,27 +36,10 @@ def detection_by_chatgpt(ollama_host_config: OllamaHostConfig, test_data, mixed_
 
 
 def main():
-    parser = argparse.ArgumentParser(description='outfox_detection_without_considering_attacks')
-    parser.add_argument('--model_name', help='Specify target llms to be detected.', required=True, choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
-    parser.add_argument("--detection_model", type=str, default="gemma3:270m", help="The model name of the detection model")
-    parser.add_argument("--parallel_per_host", type=int, default=1, help="The number of request each host/server is allowed to handle parallel")
-    parser.add_argument("--n_hosts", type=int, default=1, help="The number of hosts/servers will be used")
-    parser.add_argument("--host_ip", type=str, default="127.0.0.1", help="The ip of all hosts")
-    parser.add_argument("--host_start_port", type=int, default=11434)
-
-    args = parser.parse_args()
-
-    ollama_host_config = OllamaHostConfig(
-        args.detection_model,
-        args.parallel_per_host,
-        args.n_hosts,
-        args.host_ip,
-        args.host_start_port,
-    )
-
+    args = parse_outfox_args().parse_args()
     model_name = args.model_name
     
-    preds_folder = Path(ROOT / "results", "outfox_detection", ollama_host_config.model_name.replace(":", "_"))
+    preds_folder = Path(ROOT / "results", "outfox_detection", model_name)
     preds_folder.mkdir(parents=True, exist_ok=True)
     preds_path = preds_folder / f"without_considering_attack_{model_name}.csv"
     metrics_path = preds_folder / f"without_considering_attack_{model_name}_metrics.csv"
@@ -65,7 +50,8 @@ def main():
     # Loading top-k (problem statement, human-written essay, LLM-generated essay) sets retrieved in advance based on the problem statement, using tf-idf.
     # Whatever LMs (FLAN, GPT-3.5) to be detected, our OUTFOX detector consider the essays by ChatGPT.
     test_ps_to_near_ps_human_lm_pairs_from_train = load_pkl('data/chatgpt/util/test_ps_to_near_ps_human_lm_pairs_from_train.pkl')
-    preds = detection_by_chatgpt(ollama_host_config, test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path)
+    llm = OutfoxDetectionLLM(args)
+    preds = detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path, llm)
 
     human_rec, machine_rec, avg_rec, acc, precision, recall, f1 = compute_metrics(test_labels, preds)
     print(f"HumanRec: {human_rec}, MachineRec: {machine_rec}, AvgRec: {avg_rec}, Acc:{acc}, Precision:{precision}, Recall:{recall}, F1:{f1}")

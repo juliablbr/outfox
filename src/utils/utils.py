@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 from numpy import dot
 from numpy.linalg import norm
 import pickle
@@ -9,17 +10,29 @@ import tiktoken
 import time
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-import ollama
-import asyncio
-from ollama import AsyncClient
-from tqdm import tqdm
 from pydantic import BaseModel
 import csv
+import argparse
 from pathlib import Path
+#
+from vllm import LLM, SamplingParams
+from vllm.sampling_params import GuidedDecodingParams
+from pprint import pprint
+#
 
 print('Loading tiktoken tokenizer...')
 gpt_turbo_encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
+def parse_outfox_args():
+    parser = argparse.ArgumentParser(description='Outfox model detection parser')
+    parser.add_argument('--model_name', help='Specify target llms to be detected.', required=True, choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
+    parser.add_argument("--detection_model", type=str, default="google/gemma-3-270m", help="The model name of the detection model")
+    parser.add_argument("--gpu_memory_utilization", default=1, type=float)
+    parser.add_argument("--max_num_seqs", default=256, type=int)
+    parser.add_argument("--max_model_len", default=None, type=int)
+    parser.add_argument("--max-tokens", default=None, type=int)
+    parser.add_argument("--seed", default=None, type=int)
+    return parser
 
 def save_predictions(path: Path, predictions):
     with path.open(mode="w", newline="", encoding="utf-8") as file:
@@ -35,15 +48,23 @@ def save_metrics(path: Path, metrics: dict[str, float]):
         for name, value in metrics.items():
             writer.writerow([name, value])
 
+class OutfoxDetectionLLM:
+    def __init__(self, args):
+        self.llm = LLM(model=args.detection_model,
+                       gpu_memory_utilization=args.gpu_memory_utilization,
+                       max_num_seqs=args.max_num_seqs,
+                       max_model_len=args.max_model_len,
+                       seed=args.seed)
+        #
+        self.args = args
+        print(f"\nLoaded the {args.detection_model} model")
 
-@dataclass
-class OllamaHostConfig:
-    model_name: str
-    parallel_requests_per_host: int
-    number_of_hosts: int
-    host_ip: str
-    host_start_port: int
-
+    def generate(self, prompts, additional_sampling_params: dict[str, Any]):
+        sampling_params = SamplingParams(seed=self.args.seed)
+        for k, v in additional_sampling_params.items():
+            if hasattr(sampling_params, k) and additional_sampling_params[k] is not None:
+                setattr(sampling_params, k, v)
+        return self.llm.generate(prompts, sampling_params=sampling_params)
 
 class LLMAnswer(BaseModel):
     detection: str
@@ -98,68 +119,15 @@ def make_mixed_data(human_path, lm_path, ps_path):
     return (data, labels, pss)  
 
 
-async def generation_by_ollama(ollama_host_config: OllamaHostConfig, prompts, **kwargs):
-    progress_bar = tqdm(total=len(prompts), desc="Generating the ollama responses...", position=0)
-    # We append a bunch of None values to preserve order
-    results = [None] * len(prompts)
-    # Create async queue with all Messages (prompts)
-    task_queue = asyncio.Queue()
-    for idx, message in enumerate(prompts):
-        task_queue.put_nowait((idx, message))
+def generation_by_vllm(prompts, llm, sampling_params={}):
+    outputs = llm.generate(prompts, sampling_params)
 
-    tasks = []
-    host_start_port = ollama_host_config.host_start_port
-    n_hosts = ollama_host_config.number_of_hosts
-    parallel_requests = ollama_host_config.parallel_requests_per_host
-
-    worker_count = n_hosts * parallel_requests
-    for i in range(worker_count):
-        host_port = host_start_port + (i // parallel_requests)
-        host = f"{ollama_host_config.host_ip}:{host_port}"
-        print(f"Worker {i} on host {host}")
-
-        task = asyncio.create_task(worker(ollama_host_config.model_name, task_queue, results, host, progress_bar, **kwargs))
-        tasks.append(task)
-    
-    await task_queue.join()
-    
-    for task in tasks:
-        task.cancel()
-    
-    # Await the completion of all worker tasks
-    await asyncio.gather(*tasks)
-    progress_bar.close()
+    results = []
+    for output in outputs:
+        generated_text = output.outputs[0].text
+        results.append(generated_text)
 
     return results
-
-async def worker(model, task_queue, results, host, progress_bar, **kwargs):
-    try:
-        while not task_queue.empty():
-            idx, message = await task_queue.get()
-            answer = await start_ollama_chat(message, model, host, **kwargs)
-            if answer is None:
-                results[idx] = None
-            else:
-                results[idx] = answer.detection
-            progress_bar.update(1)
-            task_queue.task_done()
-    except asyncio.CancelledError:
-        print("asyncio.CancelledError")
-        return
-
-async def start_ollama_chat(message, model, host, **kwargs):
-    response = await AsyncClient(host=host).chat(
-        model=model,
-        messages=[{"role": "user", "content": f"{message}"}],
-        options=kwargs if kwargs else None,
-        format=LLMAnswer.model_json_schema(),
-    )
-    try:
-        answer = LLMAnswer.model_validate_json(response.message.content)
-    except Exception as e:
-        print(f"[error] {e}")
-        return None
-    return answer
 
 def make_prompt_for_detection(target_text, pairs):
     instruction = 'Please classify whether the text is generated by a Human or a Language Model(LM).\n'
@@ -170,7 +138,8 @@ def make_prompt_for_detection(target_text, pairs):
     all_data = []
     for pair in pairs:
         human, lm = pair[-2], pair[-1]
-        human, lm = truncate_text(human, truncated_length, 'token'), truncate_text(lm, truncated_length, 'token')
+        human = truncate_text(human, truncated_length, 'token')
+        lm = truncate_text(lm, truncated_length, 'token')
         all_data.append((human, 'Human'))
         all_data.append((lm, 'LM'))
     random.shuffle(all_data)
@@ -198,15 +167,19 @@ def make_prompt_for_attack(lm_and_attack_labels, problem_statement, human_essay)
     return (prompt, human_essay_tokens)
 
 
-def identify_attack_label(ps, lm, train_ps_to_near_ps_human_lm_pairs_from_train):
+def identify_attack_label(llm, ps, lm, train_ps_to_near_ps_human_lm_pairs_from_train):
     # Attack label includes "Good" or "Bad".
     # 'Good' example for attacker is an LLM-generated essay which our detector misclassify, retrieved from the training set.
     # 'Bad' example for attacker is an LLM-generated essay which our detector classify correctly, retrieved from the training set
     ps_human_lm_train = train_ps_to_near_ps_human_lm_pairs_from_train[ps]
     human_lm_train = [(human, lm) for ps, human, lm in ps_human_lm_train]
     prompt = make_prompt_for_detection(lm, human_lm_train[:5])
-    res = generation_by_ollama(prompt, temperature=0, top_p=0)
-    pred = process_reply_from_chatgpt(res)
+    responses = generation_by_vllm(prompt, llm, {
+        "guided_decoding": GuidedDecodingParams(choice=["LM", "Human"]),
+        "temperature": 0,
+        "top_p": 1.0
+    })
+    pred = [process_reply_from_chatgpt(response) for response in responses]
     return (ps, lm, 'Good' if pred == '0' else 'Bad')
 
 
