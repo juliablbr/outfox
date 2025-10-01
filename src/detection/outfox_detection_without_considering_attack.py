@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import random
+
+from src.utils import ROOT
 random.seed(42)
 from tqdm import tqdm
 import asyncio
@@ -7,11 +9,10 @@ import time
 import os
 import argparse
 from pathlib import Path
-from src.utils.utils import OllamaHostConfig, load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics
+from src.utils.utils import OllamaHostConfig, load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_ollama, make_prompt_for_detection, compute_metrics, save_metrics, save_predictions
 
 
 def detection_by_chatgpt(ollama_host_config: OllamaHostConfig, test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, preds_path):
-    preds = []
     prompts = []
     for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Creating prompts...'):
         prompts.append(make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5]))
@@ -19,16 +20,16 @@ def detection_by_chatgpt(ollama_host_config: OllamaHostConfig, test_data, mixed_
     print("Starting responses")
     responses = asyncio.run(generation_by_ollama(ollama_host_config, prompts, temperature=0, top_p=0))
     print("Done with responses")
+
+    save_predictions(preds_path, responses)
+    print(f"Saved predictions in `{preds_path}`")
+
     predictions = []
     for response in responses:
         prediction = process_reply_from_chatgpt(response)
         predictions.append(prediction)
 
-    with open(preds_path, 'w') as f_pred:
-        for pred in predictions:
-            f_pred.write(f"{pred}\n")
-
-    return preds
+    return predictions
 
 
 
@@ -53,9 +54,10 @@ def main():
 
     model_name = args.model_name
     
-    preds_folder = Path("results", "outfox_detection")
+    preds_folder = Path("results", "outfox_detection", ollama_host_config.model_name.replace(":", "_"))
     preds_folder.mkdir(parents=True, exist_ok=True)
-    preds_path = preds_folder / f"without_considering_attack_{model_name}.log"
+    preds_path = preds_folder / f"without_considering_attack_{model_name}.csv"
+    metrics_path = preds_folder / f"without_considering_attack_{model_name}_metrics.csv"
 
     test_data, test_labels, mixed_test_pss = make_mixed_data(f'data/common/test/test_humans.pkl', f'data/{model_name}/test/test_lms.pkl', f'data/common/test/test_problem_statements.pkl')
     
@@ -67,6 +69,16 @@ def main():
 
     human_rec, machine_rec, avg_rec, acc, precision, recall, f1 = compute_metrics(test_labels, preds)
     print(f"HumanRec: {human_rec}, MachineRec: {machine_rec}, AvgRec: {avg_rec}, Acc:{acc}, Precision:{precision}, Recall:{recall}, F1:{f1}")
+    save_metrics(metrics_path, {
+        "human_rec": human_rec,
+        "machine_rec": machine_rec,
+        "avg_rec": avg_rec,
+        "accuracy": acc,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1
+    })
+    print(f"Saved metrics in `{metrics_path}`")
 
 
 if __name__ == '__main__':
