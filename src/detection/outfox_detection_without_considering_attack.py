@@ -17,9 +17,9 @@ def detection_by_chatgpt(ollama_host_config: OllamaHostConfig, test_data, mixed_
     for text, ps in tqdm(zip(test_data, mixed_test_pss), total=len(test_data), desc='Creating prompts...'):
         prompts.append(make_prompt_for_detection(text, test_ps_to_near_ps_human_lm_pairs_from_train[ps][:5]))
     
-    print("Starting responses")
+    print("Starting detector")
     responses = asyncio.run(generation_by_ollama(ollama_host_config, prompts, temperature=0, top_p=0))
-    print("Done with responses")
+    print("Finished detection")
 
     save_predictions(preds_path, responses)
     print(f"Saved predictions in `{preds_path}`")
@@ -54,7 +54,7 @@ def main():
 
     model_name = args.model_name
     
-    preds_folder = Path("results", "outfox_detection", ollama_host_config.model_name.replace(":", "_"))
+    preds_folder = Path(ROOT / "results", "outfox_detection", ollama_host_config.model_name.replace(":", "_"))
     preds_folder.mkdir(parents=True, exist_ok=True)
     preds_path = preds_folder / f"without_considering_attack_{model_name}.csv"
     metrics_path = preds_folder / f"without_considering_attack_{model_name}_metrics.csv"
