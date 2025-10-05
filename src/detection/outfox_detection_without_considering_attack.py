@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 import random
 
 from src.utils import ROOT
@@ -38,8 +37,9 @@ def detection_by_chatgpt(test_data, mixed_test_pss, test_ps_to_near_ps_human_lm_
 def main():
     args = parse_outfox_args().parse_args()
     model_name = args.model_name
+    detection_model = args.detection_model
     
-    preds_folder = Path(ROOT / "results", "outfox_detection", model_name)
+    preds_folder = Path(ROOT / "results", "outfox_detection", detection_model)
     preds_folder.mkdir(parents=True, exist_ok=True)
     preds_path = preds_folder / f"without_considering_attack_{model_name}.csv"
     metrics_path = preds_folder / f"without_considering_attack_{model_name}_metrics.csv"
