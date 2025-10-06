@@ -2,7 +2,6 @@ from pathlib import Path
 import random
 from dataclasses import astuple
 
-random.seed(42)
 
 from vllm.sampling_params import GuidedDecodingParams
 from tqdm import tqdm
@@ -180,11 +179,13 @@ def main():
     parser.add_argument('--attacking_method', help='Specify attacking methods.', required=True, choices=['outfox', 'paraphrase'])
     args = parser.parse_args()
 
+    random.seed(args.seed)
+
     attacking_method = args.attacking_method
     model_name = args.model_name
     detection_model = args.detection_model
     
-    preds_folder = Path(ROOT / "results", "outfox_detection", detection_model)
+    preds_folder = Path(ROOT / "results", "outfox_detection", detection_model / f"seed_{args.seed}")
     preds_folder.mkdir(parents=True, exist_ok=True)
 
     preds_path = preds_folder / f"with_considering_{attacking_method}_attack_{model_name}.csv"
