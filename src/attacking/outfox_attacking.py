@@ -1,4 +1,5 @@
 import random
+import sys
 random.seed(42)
 import os
 from tqdm import tqdm
@@ -33,6 +34,11 @@ def make_attacked_test(llm, test_humans, test_problem_statements, test_ps_to_nea
 
 def main():
     args = parse_outfox_args().parse_args()
+    
+    if args.dataset == "outfox" and args.model_name is None:
+        print("Using dataset `outfox` but missing --model_name")
+        sys.exit()
+
     test_humans = load_pkl('data/common/test/test_humans.pkl')
     test_problem_statements = load_pkl('data/common/test/test_problem_statements.pkl')
 

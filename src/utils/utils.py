@@ -27,7 +27,8 @@ gpt_turbo_encoding = tiktoken.encoding_for_model("gpt-3.5-turbo")
 
 def parse_outfox_args():
     parser = argparse.ArgumentParser(description='Outfox model detection parser')
-    parser.add_argument('--model_name', help='Specify target llms to be detected.', required=True, choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
+    parser.add_argument("--dataset", help="The dataset to be used", default="outfox", choices=["outfox", "daigt", "m4"])
+    parser.add_argument('--model_name', help='Specify target llms to be detected.', choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
     parser.add_argument("--detection_model", type=str, default="google/gemma-3-270m", help="The model name of the detection model")
     parser.add_argument("--gpu_memory_utilization", default=0.95, type=float)
     parser.add_argument("--max_num_seqs", default=256, type=int)
