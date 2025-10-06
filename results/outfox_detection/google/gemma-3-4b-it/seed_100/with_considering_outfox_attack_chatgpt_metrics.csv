@@ -1,0 +1,8 @@
+metric_name,metric_value
+human_rec,72.4
+machine_rec,73.6
+avg_rec,73.0
+accuracy,0.73
+precision,0.7272727272727273
+recall,0.736
+f1,0.7316103379721669

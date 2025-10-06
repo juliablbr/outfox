@@ -185,7 +185,7 @@ def main():
     model_name = args.model_name
     detection_model = args.detection_model
     
-    preds_folder = Path(ROOT / "results", "outfox_detection", detection_model / f"seed_{args.seed}")
+    preds_folder = Path(ROOT / "results", "outfox_detection", detection_model, f"seed_{args.seed}")
     preds_folder.mkdir(parents=True, exist_ok=True)
 
     preds_path = preds_folder / f"with_considering_{attacking_method}_attack_{model_name}.csv"

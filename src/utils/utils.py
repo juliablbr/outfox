@@ -112,7 +112,7 @@ def load_model_and_tokenizer(name):
 
 def truncate_text(text, truncated_length, truncate_type):
     if truncate_type == 'token':
-        truncated_encodes = gpt_turbo_encoding.encode(text)[:truncated_length]
+        truncated_encodes = gpt_turbo_encoding.encode(text, disallowed_special=())[:truncated_length]
         return gpt_turbo_encoding.decode(truncated_encodes)
     elif truncate_type == 'word':
         return ' '.join(text.split(' ')[:truncated_length])
@@ -120,7 +120,7 @@ def truncate_text(text, truncated_length, truncate_type):
 
 def string2token_nums(string):
     num_tokens = 0
-    num_tokens = len(gpt_turbo_encoding.encode(string))
+    num_tokens = len(gpt_turbo_encoding.encode(string, disallowed_special=()))
     return num_tokens
 
 
