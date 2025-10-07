@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 import numpy as np
 import transformers
 from transformers import T5Tokenizer, T5ForConditionalGeneration
@@ -439,6 +441,8 @@ def eval_supervised(data, model):
     del detector
     torch.cuda.empty_cache()
 
+    return {f"{model}": threshold}
+
 
 if __name__ == "__main__":
     DEVICE = "cuda:0"
@@ -450,7 +454,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample_num", type=int, default=500)
     parser.add_argument("--n_perturbation_list", type=str, default="10")
     parser.add_argument("--n_perturbation_rounds", type=int, default=1)
-    parser.add_argument("--base_model_name", type=str, default="flan_t5_xxl", choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
+    parser.add_argument("--base_model_name", type=str, default="flan_t5_xxl", choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003', "daigt", "m4"])
     parser.add_argument("--mask_filling_model_name", type=str, default="t5-large")
     parser.add_argument("--batch_size", type=int, default=5)
     parser.add_argument("--chunk_size", type=int, default=20)
@@ -463,7 +467,8 @@ if __name__ == "__main__":
     parser.add_argument("--top_p", type=float, default=0.96)
     parser.add_argument("--buffer_size", type=int, default=2)
     parser.add_argument("--mask_top_p", type=float, default=1.0)
-    parser.add_argument("--cache_dir", type=str, default="~/.cache")
+    parser.add_argument("--cache_dir", type=Path, default="~/.cache")
+    parser.add_argument("--statistical", action="store_true")
     
     args = parser.parse_args()
 
@@ -474,13 +479,13 @@ if __name__ == "__main__":
     n_perturbation_list = [int(x) for x in args.n_perturbation_list.split(",")]
     n_perturbation_rounds = args.n_perturbation_rounds
 
-    cache_dir = args.cache_dir
+    cache_dir = str(args.cache_dir.expanduser())
     os.environ["XDG_CACHE_HOME"] = cache_dir
     if not os.path.exists(cache_dir):
         os.makedirs(cache_dir)
     print(f"Using cache dir {cache_dir}")
 
-    if args.base_model_name == 'flan_t5_xxl':
+    if args.base_model_name == 'flan_t5_xxl' and args.statistical:
         # essay generation model
         base_model, base_tokenizer = load_base_model_and_tokenizer('google/flan-t5-xxl')
         # mask filling t5 model
@@ -498,11 +503,27 @@ if __name__ == "__main__":
 
     ## Preparing essay data to be detected ##
     data = dict()
-    with open(f'data/common/valid/valid_contexts.pkl', 'rb') as fa, open(f'data/{args.base_model_name}/valid/valid_lms.pkl', 'rb') as fb, open('data/common/valid/valid_humans.pkl', 'rb') as fc:
+    if args.base_model_name in ["chatgpt", "flan_t5_xxl", "text_davinci_003"]:
+        problem_statements = "data/common/valid/valid_contexts.pkl"
+        language_models = f"data/{args.base_model_name}/valid/valid_lms.pkl"
+        human = "data/common/valid/valid_humans.pkl"
+    elif args.base_model_name == "daigt":
+        problem_statements = "daigt_pickles/daigt_problem_statements_val.pkl"
+        language_models = "daigt_pickles/daigt_lms_val.pkl"
+        human = "daigt_pickles/daigt_humans_val.pkl"
+    elif args.base_model_name == "m4":
+        problem_statements = "m4_pickles/combined_problem_statements_val.pkl"
+        language_models = "m4_pickles/combined_lms_val.pkl"
+        human = "m4_pickles/combined_humans_val.pkl"
+    else:
+        raise ValueError("Data can not be loaded")
+
+
+    with open(problem_statements, 'rb') as fa, open(language_models, 'rb') as fb, open(human, 'rb') as fc:
         data['input'] = pickle.load(fa)
         data['sampled'] = pickle.load(fb)
         data['original'] = pickle.load(fc)
-    
+
     originals, samples = data['original'][:], data['sampled'][:]
     data['original'], data['sampled'] = [], []
     for original, sample in zip(originals, samples):
@@ -511,7 +532,9 @@ if __name__ == "__main__":
         data['sampled'].append(sample)
     ## Preparing essay data to be detected ##
 
-    if args.base_model_name == 'flan_t5_xxl':
+    dataset_name = args.base_model_name
+
+    if args.base_model_name == 'flan_t5_xxl' and args.statistical:
         # # Statistical Outlier Approaches
         run_baseline_threshold_experiment(get_ll, "likelihood", n_samples=sample_num)
         run_baseline_threshold_experiment(get_rank, "rank", n_samples=sample_num)
@@ -529,10 +552,20 @@ if __name__ == "__main__":
                     n_samples=sample_num,
                 )
     else:
+        thresholds = {}
         # Supervised Classifiers
-        eval_supervised(data, model="roberta-base-openai-detector")
-        eval_supervised(data, model="roberta-large-openai-detector")
-        eval_supervised(data, model="Hello-SimpleAI/chatgpt-detector-roberta")
+        thresholds |= eval_supervised(data, model="roberta-base-openai-detector")
+        thresholds |= eval_supervised(data, model="roberta-large-openai-detector")
+        thresholds |= eval_supervised(data, model="Hello-SimpleAI/chatgpt-detector-roberta")
+
+        root = Path(__file__).parent.parent.parent
+        threshold_file = f"{dataset_name}_threshold_config.json" 
+        threshold_file_path = root / "config" / threshold_file
+
+        with threshold_file_path.open(mode="w", encoding="utf-8") as file:
+            json.dump(thresholds, file, indent=4)
+
+
 
     
 

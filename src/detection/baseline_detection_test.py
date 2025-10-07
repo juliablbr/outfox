@@ -1,3 +1,4 @@
+from pathlib import Path
 import numpy as np
 import datasets
 import transformers
@@ -17,7 +18,8 @@ import pickle
 import functools
 import time
 from torch.nn import CrossEntropyLoss
-from IPython.core.debugger import Pdb
+
+from src.utils.utils import save_metrics
 
 
 # define regex to match all <extra_id_*> tokens, where * is an integer
@@ -399,7 +401,24 @@ def run_baseline_threshold_experiment_(criterion_fn, name, n_samples=500):
 
 def mixed_human_lm_dataset(base_model_name):
     random.seed(42)
-    with open('data/common/test/test_humans.pkl', 'rb') as fa, open(f'data/{base_model_name}/test/test_lms.pkl', 'rb') as fb, open(f'data/common/test/test_contexts.pkl', 'rb') as fc:
+
+    if base_model_name in ["chatgpt", "flan_t5_xxl", "text_davinci_003"]:
+        problem_statements = "data/common/test/test_contexts.pkl"
+        language_models = f"data/{base_model_name}/test/test_lms.pkl"
+        human = "data/common/test/test_humans.pkl"
+    elif base_model_name == "daigt":
+        problem_statements = "daigt_pickles/daigt_problem_statements_test.pkl"
+        language_models = "daigt_pickles/daigt_lms_test.pkl"
+        human = "daigt_pickles/daigt_humans_test.pkl"
+    elif base_model_name == "m4":
+        problem_statements = "m4_pickles/combined_problem_statements_test.pkl"
+        language_models = "m4_pickles/combined_lms_test.pkl"
+        human = "m4_pickles/combined_humans_test.pkl"
+    else:
+        raise ValueError("Data can not be loaded")
+
+
+    with open(human, 'rb') as fa, open(language_models, 'rb') as fb, open(problem_statements, 'rb') as fc:
         human_texts = pickle.load(fa)
         lm_texts = pickle.load(fb)
         contexts = pickle.load(fc)
@@ -441,6 +460,21 @@ def eval_supervised_(model):
     print(f'Model: {model}')
     print(f"HumanRec: {human_rec}, MachineRec: {machine_rec}, AvgRec: {avg_rec}, Acc:{acc}, Precision:{precision}, Recall:{recall}, F1:{f1}")
 
+    metrics_path = Path("results", "baseline", str(model))
+    metrics_path.mkdir(parents=True, exist_ok=True)
+    metrics_path = metrics_path / f"{args.base_model_name}_metrics.csv"
+    save_metrics(metrics_path, {
+        "human_rec": human_rec,
+        "machine_rec": machine_rec,
+        "avg_rec": avg_rec,
+        "accuracy": acc,
+        "precision": precision,
+        "recall": recall,
+        "f1": f1
+    })
+    print(f"Saved metrics in `{metrics_path}`")
+
+
     # free GPU memory
     del detector
     torch.cuda.empty_cache()
@@ -456,7 +490,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample_num", type=int, default=500)
     parser.add_argument("--n_perturbation_list", type=str, default="10")
     parser.add_argument("--n_perturbation_rounds", type=int, default=1)
-    parser.add_argument("--base_model_name", type=str, default="flan_t5_xxl", choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003'])
+    parser.add_argument("--base_model_name", type=str, default="flan_t5_xxl", choices=['chatgpt', 'flan_t5_xxl', 'text_davinci_003', "daigt", "m4"])
     parser.add_argument("--mask_filling_model_name", type=str, default="t5-large")
     parser.add_argument("--batch_size", type=int, default=5)
     parser.add_argument("--chunk_size", type=int, default=20)
@@ -469,6 +503,7 @@ if __name__ == "__main__":
     parser.add_argument("--mask_top_p", type=float, default=1.0)
     parser.add_argument("--pre_perturb_pct", type=float, default=0.0)
     parser.add_argument("--pre_perturb_span_length", type=int, default=5)
+    parser.add_argument("--statistical", action="store_true")
     
     args = parser.parse_args()
 
@@ -479,7 +514,7 @@ if __name__ == "__main__":
     n_perturbation_list = [int(x) for x in args.n_perturbation_list.split(",")]
     n_perturbation_rounds = args.n_perturbation_rounds
 
-    if args.base_model_name == 'flan_t5_xxl':
+    if args.base_model_name == 'flan_t5_xxl' and args.statistical:
         # essay generation model
         base_model, base_tokenizer = load_base_model_and_tokenizer('google/flan-t5-xxl')
 
@@ -498,9 +533,10 @@ if __name__ == "__main__":
     print('Loading target essays to be detected...')
     all_data = mixed_human_lm_dataset(args.base_model_name)
 
-    fixed_threshold = json2dict(f'config/{args.base_model_name}_essay_threshold_config.json')
+    # fixed_threshold = json2dict(f'config/{args.base_model_name}_essay_threshold_config.json')
+    fixed_threshold = json2dict(Path("config", f"{args.base_model_name}_threshold_config.json"))
 
-    if args.base_model_name == 'flan_t5_xxl':
+    if args.base_model_name == 'flan_t5_xxl' and args.statistical:
         # Statistical Outlier Approaches
         run_baseline_threshold_experiment_(get_ll, "likelihood", n_samples=sample_num)
         run_baseline_threshold_experiment_(get_rank, "rank", n_samples=sample_num)
