@@ -220,7 +220,7 @@ def main():
 
     dp = DipperParaphraser(0) if attacking_method == 'paraphrase' else None
 
-    print(f"Start outfox detection considering {attacking_method} attacks for essays from dataset {dataset_name}...")
+    print(f"Start outfox detection considering {attacking_method} attacks for dataset {dataset_name}...")
 
     # Loading top-k (problem statement, human-written essay, LLM-generated essay) sets retrieved in advance based on the problem statement, using tf-idf.
     # Whatever LMs (FLAN, GPT-3.5) to be detected, our OUTFOX detector consider the essays by ChatGPT.
