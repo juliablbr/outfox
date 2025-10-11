@@ -8,7 +8,23 @@ from vllm.sampling_params import GuidedDecodingParams
 from tqdm import tqdm
 
 from src.attacking.dipper_attacking import DipperParaphraser
-from src.utils.utils import OutfoxDetectionLLM, TaskTriplet, get_similar_triplets, combine_machine_text_label, parse_outfox_args, load_pkl, process_reply_from_chatgpt, make_mixed_data, generation_by_vllm, identify_attack_labels, make_prompt_for_detection, make_prompts_for_attacks, compute_metrics, save_metrics, save_predictions
+from src.utils.utils import (
+    OutfoxDetectionLLM,
+    TaskTriplet,
+    get_similar_triplets,
+    combine_machine_text_label,
+    parse_outfox_args,
+    load_pkl,
+    process_reply_from_chatgpt,
+    make_mixed_data,
+    generation_by_vllm,
+    identify_attack_labels,
+    make_prompt_for_detection,
+    make_prompts_for_attacks,
+    compute_metrics,
+    save_metrics,
+    save_predictions,
+)
 from src.utils import ROOT
 
 
@@ -16,7 +32,7 @@ def split_examples_to_attack(
     similar_triplets_per_problem: list[list[TaskTriplet]],
     attack_n: int,
 ) -> tuple[list[list[TaskTriplet]], list[list[TaskTriplet]]]:
-     # we will attack these indices
+    # we will attack these indices
     random_triplet_indices = [
         random.sample(range(len(examples)), attack_n)
         for examples in similar_triplets_per_problem
@@ -25,7 +41,9 @@ def split_examples_to_attack(
     untouched = []
     to_be_attacked = []
 
-    for similar_triplets, attack_indices in zip(similar_triplets_per_problem, random_triplet_indices):
+    for similar_triplets, attack_indices in zip(
+        similar_triplets_per_problem, random_triplet_indices
+    ):
         untouched_inner = []
         attack_inner = []
 
@@ -34,14 +52,16 @@ def split_examples_to_attack(
                 attack_inner.append(triplet)
             else:
                 untouched_inner.append(triplet)
-        
+
         untouched.append(untouched_inner)
         to_be_attacked.append(attack_inner)
 
     return untouched, to_be_attacked
 
 
-def dipper_attack(to_be_attacked: list[list[TaskTriplet]], dp) -> list[list[TaskTriplet]]:
+def dipper_attack(
+    to_be_attacked: list[list[TaskTriplet]], dp
+) -> list[list[TaskTriplet]]:
     attacked = []
     # For each problem there are n examples. For each example, the machine-written text
     # is attacked.
@@ -53,17 +73,19 @@ def dipper_attack(to_be_attacked: list[list[TaskTriplet]], dp) -> list[list[Task
                 example.machine_text,
                 lex_diversity=60,
                 order_diversity=60,
-                prefix='',
+                prefix="",
                 do_sample=True,
                 top_p=0.75,
                 top_k=None,
-                max_length=4096
+                max_length=4096,
             )
-            attacked_examples.append(TaskTriplet(
-                example.problem_statement,
-                example.human_text,
-                attacked_essay,
-            ))
+            attacked_examples.append(
+                TaskTriplet(
+                    example.problem_statement,
+                    example.human_text,
+                    attacked_essay,
+                )
+            )
         attacked.append(attacked_examples)
 
     return attacked
@@ -72,7 +94,7 @@ def dipper_attack(to_be_attacked: list[list[TaskTriplet]], dp) -> list[list[Task
 def outfox_attack(
     llm,
     to_be_attacked: list[list[TaskTriplet]],
-    train_ps_to_near_ps_human_lm_pairs_from_train
+    train_ps_to_near_ps_human_lm_pairs_from_train,
 ) -> list[list[TaskTriplet]]:
     # This will get the triplets with similar problem statements for each problem
     # statement in `to_be_attacked`
@@ -83,12 +105,12 @@ def outfox_attack(
     )
 
     attack_labels = identify_attack_labels(
-        llm,
-        similar_examples_to_attacked,
-        train_ps_to_near_ps_human_lm_pairs_from_train
+        llm, similar_examples_to_attacked, train_ps_to_near_ps_human_lm_pairs_from_train
     )
 
-    attacker_examples = combine_machine_text_label(similar_examples_to_attacked, attack_labels)
+    attacker_examples = combine_machine_text_label(
+        similar_examples_to_attacked, attack_labels
+    )
 
     attacking_prompts, human_essay_tokens = make_prompts_for_attacks(
         to_be_attacked,
@@ -97,11 +119,12 @@ def outfox_attack(
 
     print("Start generating essays.", len(attacking_prompts), "to be generated")
     # Generation of the attacked machine text
-    attacked_essays = generation_by_vllm(attacking_prompts, llm, {
-            "temperature": 1.3,
-            "top_p": 1.0,
-            "max_tokens": max(human_essay_tokens)+50
-        }, "Generate essays")
+    attacked_essays = generation_by_vllm(
+        attacking_prompts,
+        llm,
+        {"temperature": 1.3, "top_p": 1.0, "max_tokens": max(human_essay_tokens) + 50},
+        "Generate essays",
+    )
     print("Finished generating essays")
 
     # Combining the original problem statement + human text + attacked machine text
@@ -112,32 +135,45 @@ def outfox_attack(
         for example in examples:
             attacked_text = attacked_essays[attacked_essay_idx]
             attacked_examples.append(
-                TaskTriplet(example.problem_statement, example.human_text, attacked_text)
+                TaskTriplet(
+                    example.problem_statement, example.human_text, attacked_text
+                )
             )
             attacked_essay_idx += 1
         attacked_examples_per_problem.append(attacked_examples)
-    
+
     return attacked_examples_per_problem
 
 
-def detection_by_chatgpt(llm, test_data, test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train, preds_path, dp=None, attacking_method='outfox'):
+def detection_by_chatgpt(
+    llm,
+    test_data,
+    test_pss,
+    test_ps_to_near_ps_human_lm_pairs_from_train,
+    train_ps_to_near_ps_human_lm_pairs_from_train,
+    preds_path,
+    dp=None,
+    attacking_method="outfox",
+):
     # This will contain for each test_essay/test_pss a list of 5 triplets
     # (problem statement, human text, machine text), that are related to the test_pss.
     # Where test_pss are the problem statements for each essay in the test_data
-    similar_triplets_per_problem = get_similar_triplets(test_pss, test_ps_to_near_ps_human_lm_pairs_from_train)
+    similar_triplets_per_problem = get_similar_triplets(
+        test_pss, test_ps_to_near_ps_human_lm_pairs_from_train
+    )
 
-    
     untouched, to_be_attacked = split_examples_to_attack(
-        similar_triplets_per_problem,
-        attack_n=3
+        similar_triplets_per_problem, attack_n=3
     )
     if attacking_method == "outfox":
-        attacked = outfox_attack(llm, to_be_attacked, train_ps_to_near_ps_human_lm_pairs_from_train)
+        attacked = outfox_attack(
+            llm, to_be_attacked, train_ps_to_near_ps_human_lm_pairs_from_train
+        )
     elif attacking_method == "dipper":
         attacked = dipper_attack(to_be_attacked, dp)
     else:
         raise ValueError(f"Unknown attacking method: {attacking_method}")
-    
+
     examples_for_detector = [
         untoched_examples + attacked_examples
         for untoched_examples, attacked_examples in zip(untouched, attacked)
@@ -149,20 +185,24 @@ def detection_by_chatgpt(llm, test_data, test_pss, test_ps_to_near_ps_human_lm_p
     for target_text, example_for_detection in tqdm(
         zip(test_data, examples_for_detector),
         total=len(test_data),
-        desc=f'Creating prompts for outfox detection considering {attacking_method} attacks...'
+        desc=f"Creating prompts for outfox detection considering {attacking_method} attacks...",
     ):
         pairs = [astuple(example) for example in example_for_detection]
         prompt = make_prompt_for_detection(target_text, pairs)
         prompts.append(prompt)
 
-
-    # Run the detector for each prompt to detect whether the essay is Human or LM written 
+    # Run the detector for each prompt to detect whether the essay is Human or LM written
     print("Starting detector")
-    responses = generation_by_vllm(prompts, llm, {
-        "guided_decoding": GuidedDecodingParams(choice=["LM", "Human"]),
-        "temperature": 0,
-        "top_p": 1.0
-    }, "Target essay detection")
+    responses = generation_by_vllm(
+        prompts,
+        llm,
+        {
+            "guided_decoding": GuidedDecodingParams(choice=["LM", "Human"]),
+            "temperature": 0,
+            "top_p": 1.0,
+        },
+        "Target essay detection",
+    )
     print("Finished detection")
 
     save_predictions(preds_path, responses)
@@ -177,7 +217,12 @@ def detection_by_chatgpt(llm, test_data, test_pss, test_ps_to_near_ps_human_lm_p
 
 def main():
     parser = parse_outfox_args()
-    parser.add_argument('--attacking_method', help='Specify attacking methods.', required=True, choices=['outfox', 'paraphrase'])
+    parser.add_argument(
+        "--attacking_method",
+        help="Specify attacking methods.",
+        required=True,
+        choices=["outfox", "paraphrase"],
+    )
     args = parser.parse_args()
 
     if args.dataset == "outfox" and args.model_name is None:
@@ -189,60 +234,120 @@ def main():
     attacking_method = args.attacking_method
     model_name = args.model_name
     detection_model = args.detection_model
+    lm_attacking = args.lm_attacking
 
     if args.dataset == "outfox":
         dataset_name = model_name
 
         test_human = "data/common/test/test_humans.pkl"
-        test_lms = f"data/{dataset_name}/test/test_lms.pkl"
+        if lm_attacking is not None:
+            test_lms = f"data/{dataset_name}/test/test_{lm_attacking}_attacks.pkl"
+        else:
+            test_lms = f"data/{dataset_name}/test/test_lms.pkl"
         test_problem_statements = "data/common/test/test_problem_statements.pkl"
-        test_train_problem_statement_map = "data/chatgpt/util/test_ps_to_near_ps_human_lm_pairs_from_train.pkl"
-        train_train_problem_statement_map = "data/chatgpt/util/train_ps_to_near_ps_human_lm_pairs_from_train.pkl"
+        test_train_problem_statement_map = (
+            "data/chatgpt/util/test_ps_to_near_ps_human_lm_pairs_from_train.pkl"
+        )
+        train_train_problem_statement_map = (
+            "data/chatgpt/util/train_ps_to_near_ps_human_lm_pairs_from_train.pkl"
+        )
 
     else:
         dataset_name = args.dataset
 
         dataset_folder = ROOT / f"{dataset_name}_pickles"
-        test_human = dataset_folder / f"{'combined' if dataset_name == 'm4' else dataset_name}_humans_test.pkl"
-        test_lms = dataset_folder / f"{'combined' if dataset_name == 'm4' else dataset_name}_lms_test.pkl"
-        test_problem_statements = dataset_folder / f"{'combined' if dataset_name == 'm4' else dataset_name}_problem_statements_test.pkl"
-        test_train_problem_statement_map = dataset_folder / "test_ps_to_near_ps_human_lm_pairs_from_train.pkl"
-        train_train_problem_statement_map = dataset_folder / "train_ps_to_near_ps_human_lm_pairs_from_train.pkl"
+        test_human = (
+            dataset_folder
+            / f"{'combined' if dataset_name == 'm4' else dataset_name}_humans_test.pkl"
+        )
+        if lm_attacking is not None:
+            test_lms = dataset_folder / f"test_{lm_attacking}_attacks.pkl"
+        else:
+            test_lms = (
+                dataset_folder
+                / f"{'combined' if dataset_name == 'm4' else dataset_name}_lms_test.pkl"
+            )
+        test_problem_statements = (
+            dataset_folder
+            / f"{'combined' if dataset_name == 'm4' else dataset_name}_problem_statements_test.pkl"
+        )
+        test_train_problem_statement_map = (
+            dataset_folder / "test_ps_to_near_ps_human_lm_pairs_from_train.pkl"
+        )
+        train_train_problem_statement_map = (
+            dataset_folder / "train_ps_to_near_ps_human_lm_pairs_from_train.pkl"
+        )
 
-    
-    preds_folder = Path(ROOT / "results", "outfox_detection", detection_model, f"seed_{args.seed}")
+    preds_folder = Path(
+        ROOT / "results", "outfox_detection", detection_model, f"seed_{args.seed}"
+    )
     preds_folder.mkdir(parents=True, exist_ok=True)
 
-    preds_path = preds_folder / f"with_considering_{attacking_method}_attack_{dataset_name}.csv"
-    metrics_path = preds_folder / f"with_considering_{attacking_method}_attack_{dataset_name}_metrics.csv"
-    
-    test_data, test_labels, test_pss = make_mixed_data(test_human, test_lms, test_problem_statements)
+    if lm_attacking is None:
+        lm_attacking = ""
+    else:
+        lm_attacking = lm_attacking + "-attack_"
 
-    dp = DipperParaphraser(0) if attacking_method == 'paraphrase' else None
+    preds_path = (
+        preds_folder
+        / f"{lm_attacking}with_considering_{attacking_method}_attack_{dataset_name}.csv"
+    )
+    metrics_path = (
+        preds_folder
+        / f"{lm_attacking}with_considering_{attacking_method}_attack_{dataset_name}_metrics.csv"
+    )
 
-    print(f"Start outfox detection considering {attacking_method} attacks for dataset {dataset_name}...")
+    test_data, test_labels, test_pss = make_mixed_data(
+        test_human, test_lms, test_problem_statements
+    )
+
+    dp = DipperParaphraser(0) if attacking_method == "paraphrase" else None
+
+    print(
+        f"Start outfox detection considering {attacking_method} attacks for dataset {dataset_name}..."
+    )
 
     # Loading top-k (problem statement, human-written essay, LLM-generated essay) sets retrieved in advance based on the problem statement, using tf-idf.
     # Whatever LMs (FLAN, GPT-3.5) to be detected, our OUTFOX detector consider the essays by ChatGPT.
-    test_ps_to_near_ps_human_lm_pairs_from_train = load_pkl(test_train_problem_statement_map)
-    train_ps_to_near_ps_human_lm_pairs_from_train = load_pkl(train_train_problem_statement_map)
+    test_ps_to_near_ps_human_lm_pairs_from_train = load_pkl(
+        test_train_problem_statement_map
+    )
+    train_ps_to_near_ps_human_lm_pairs_from_train = load_pkl(
+        train_train_problem_statement_map
+    )
 
     llm = OutfoxDetectionLLM(args)
-    preds = detection_by_chatgpt(llm, test_data, test_pss, test_ps_to_near_ps_human_lm_pairs_from_train, train_ps_to_near_ps_human_lm_pairs_from_train, preds_path, dp, attacking_method)
+    preds = detection_by_chatgpt(
+        llm,
+        test_data,
+        test_pss,
+        test_ps_to_near_ps_human_lm_pairs_from_train,
+        train_ps_to_near_ps_human_lm_pairs_from_train,
+        preds_path,
+        dp,
+        attacking_method,
+    )
 
-    human_rec, machine_rec, avg_rec, acc, precision, recall, f1 = compute_metrics(test_labels, preds)
-    print(f"HumanRec: {human_rec}, MachineRec: {machine_rec}, AvgRec: {avg_rec}, Acc:{acc}, Precision:{precision}, Recall:{recall}, F1:{f1}")
-    save_metrics(metrics_path, {
-        "human_rec": human_rec,
-        "machine_rec": machine_rec,
-        "avg_rec": avg_rec,
-        "accuracy": acc,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1
-    })
+    human_rec, machine_rec, avg_rec, acc, precision, recall, f1 = compute_metrics(
+        test_labels, preds
+    )
+    print(
+        f"HumanRec: {human_rec}, MachineRec: {machine_rec}, AvgRec: {avg_rec}, Acc:{acc}, Precision:{precision}, Recall:{recall}, F1:{f1}"
+    )
+    save_metrics(
+        metrics_path,
+        {
+            "human_rec": human_rec,
+            "machine_rec": machine_rec,
+            "avg_rec": avg_rec,
+            "accuracy": acc,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+        },
+    )
     print(f"Saved metrics in `{metrics_path}`")
-    
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
