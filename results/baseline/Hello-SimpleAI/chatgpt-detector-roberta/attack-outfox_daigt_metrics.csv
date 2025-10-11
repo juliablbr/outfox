@@ -1,0 +1,8 @@
+metric_name,metric_value
+human_rec,100.0
+machine_rec,0.0
+avg_rec,50.0
+accuracy,0.5
+precision,0.0
+recall,0.0
+f1,0.0
