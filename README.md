@@ -1,80 +1,82 @@
-# OUTFOX🦊
+# OUTFOX Fork🦊🍴
 ![](https://img.shields.io/badge/Made_with-python-blue.svg)
-[![arXiv](https://img.shields.io/badge/arXiv-2307.11729-b31b1b.svg)](https://arxiv.org/abs/2307.11729)
-[![LICENSE](https://img.shields.io/badge/License-Apache--2.0-green.svg)](https://github.com/ryuryukke/OUTFOX?tab=Apache-2.0-1-ov-file)
+![](https://img.shields.io/badge/License-Apache--2.0-green.svg)
 
-### This is the official code and data for our [AAAI 2024 paper](https://ojs.aaai.org/index.php/AAAI/article/view/30120), "OUTFOX: LLM-Generated Essay Detection Through In-Context Learning with Adversarially Generated Examples"
+This repository contains an enhanced implementation of [OUTFOX](https://github.com/ryuryukke/OUTFOX), a framework for improving the robustness of machine-generated text detectors. Our work extends the original OUTFOX paper by Koike et al. (2024) with out-of-domain evaluations, vLLM integration, and performance optimizations.
 
-<p align="center">
-<img src="https://github.com/user-attachments/assets/39d5d34e-779d-49f0-b335-e7e2528f49d2" width="500"/>
-<!--   <img src="https://github.com/ryuryukke/OUTFOX/assets/61570900/4626abf6-5c75-43c9-91c0-812804e79104" width="500"/> -->
-</p>
+## Installation
+- `python==3.9.2`
 
-
-## 💨 TL;DR
-_We proposed OUTFOX, a framework that improves the robustness of LLM text detectors by allowing both the detector and the attacker to consider each other's output. Also, we pioneered effective **LLM-as-a-detector** by employing in-context learning._
-
-## 📖 Introduction
-Current LLM-generated text detectors lack robustness against attacks: they degrade detection accuracy by simply paraphrasing LLM-generated texts.
-Furthermore, there is the unexplored risk where malicious users might exploit LLMs to create texts specifically designed to evade detection.
-
-In this paper, we propose _**OUTFOX**_, a framework that improves the robustness of LLM detectors by allowing _**both the detector and the attacker to consider each other's output**_.
-In this framework, the attacker uses the detector's prediction labels as examples for in-context learning and adversarially generates essays that are harder to detect, while the detector uses the adversarially generated essays as examples for in-context learning to learn to detect essays from a strong attacker.
-
-Experiments in the domain of student essays show that...
-- The proposed detector improves the detection performance on the attacker-generated texts by up to +41.3 points F1-score. 
-- The proposed detector shows a _**state-of-the-art**_ detection performance: up to 96.9 points F1-score, beating existing detectors on non-attacked texts.
-- The proposed attacker drastically degrades the performance of detectors by up to -57.0 points F1-score, massively outperforming the baseline paraphrasing method for evading detection.
-
-## 📢 Updates
-- 🎉 **Feb 2024**: Presented in AAAI 2024, Vancouver! [[Poster](https://drive.google.com/file/d/1b4qm0wvCftNA2MKr5nevDtTALzUdqtbW/view?usp=drive_link), [Technical Appendix](https://drive.google.com/file/d/1mnxZ2v7hV4xNUdSOyy-IfAEbE4WRr1Ud/view)]
-- **Aug 2023**: Our code and essay dataset are now available!
-
-## 🔨 Setup
-- python==3.9.2
+1. Clone the repository:
+```bash
+$ git clone https://github.com/juliablbr/outfox.git
+$ cd outfox
 ```
-$ python -m venv env
-$ source env/bin/activate
+2. Install dependencies
+```bash
+$ python -m venv .venv
+$ source .venv/bin/activate
 $ pip install -r requirements.txt
 ```
-Run any script in the `scripts` directory.
 
-`scripts/detection.sh` is a script for our OUTFOX detection and baseline detections.
+## Usage
 
-`scripts/attacking.sh` is a script for our OUTFOX attacking and baseline paraphrasing attack.
+### Basic Detection (Without Attack Consideration)
 
-> [!NOTE]  
-> Customized Usage of OUTFOX:
-> 
-> - Replace the OUTFOX detector or attacker with the ones you focus on for the best results (e.g., When you have an attack to consider, you can replace the OUTFOX attacker with the attacker.)
-
-## :page_facing_up: Dataset Info
-We created our dataset based on [Kaggle FeedBack Prize](https://www.kaggle.com/competitions/feedback-prize-effectiveness), and our dataset contains 15,400 triplets of essay problem statements, human(native-student)-written essays, and LLM-generated essays. The native students range from 6th to 12th grade in the U.S.
-
-We instruct three LMs to generate essays: ChatGPT(`gpt-3.5-turbo-0613`), GPT-3.5(`text-davinci-003`), and `FLAN-T5-XXL`.
-We split the dataset into three parts: train/validation/test with 14400/500/500 examples, respectively.
-
-This is supplemental information about the file names consisting of our dataset.
-
-|File name|Content|
-|---|------|
-|`(train\|valid\|test)_problem_statements.pkl`| Essay problem statements in each set. |
-|`(train\|valid\|test)_humans.pkl`| Human-written essays in each set. |
-|`(train\|valid\|test)_lms.pkl`| LLM-generated essays in each set. |
-
-Additionally, `(train\|valid\|test)_contexts.pkl` includes the prompts used to generate essays in each set. We use these to compute the likelihood in statistical outlier detectors.
-
-We also provide the attacked essays by our OUTFOX attacker in `data/chatgpt/test/test_outfox_attacks.pkl` and the attacked essays by DIPPER in `data/dipper/(chatgpt|text_davinci_003|flan_t5_xxl)/test_attacks.pkl`.
-
-## 📚 Citation
-#### If you find our code/data/models or ideas useful in your research, please consider citing our work as follows:
+For standard detection without attack consideration:
+```bash
+$ python -m src.detection.outfox_detection_without_considering_attack \
+  --attacking_method "$ATTACK_METHOD" \
+  --model_name "$MODEL" \
+  --detection_model "$DETECTION_MODEL" \
+  --max_model_len 8192 \
+  --seed "$SEED"
 ```
-@InProceedings{Koike:OUTFOX:2024,
-  author    = {Ryuto Koike and Masahiro Kaneko and Naoaki Okazaki},
-  title     = {OUTFOX: LLM-Generated Essay Detection Through In-Context Learning with Adversarially Generated Examples},
-  booktitle = {Proceedings of the 38th AAAI Conference on Artificial Intelligence},
-  year      = {2024},
-  month     = {February},
-  address   = {Vancouver, Canada}
-}
+
+### Advanced Detection (With Attack Consideration)
+
+For detection with attack consideration:
+```bash
+$ python -m src.detection.outfox_detection_with_considering_attack_new \
+  --attacking_method "$ATTACK_METHOD" \
+  --model_name "$MODEL" \
+  --detection_model "$DETECTION_MODEL" \
+  --max_model_len 8192 \
+  --seed "$SEED"
 ```
+
+### Cross-Domain Evaluation
+
+To evaluate on new datasets without attack consideration:
+```bash
+$ python -m src.detection.outfox_detection_without_considering_attack \
+  --dataset "$DATASET" \
+  --detection_model "$DETECTION_MODEL" \
+  --max_model_len 8192 \
+  --seed "$SEED"
+```
+
+To evaluate on new datasets with attack consideration:
+```bash
+$ python -m src.detection.outfox_detection_with_considering_attack_new \
+  --dataset "$DATASET" \
+  --detection_model "$DETECTION_MODEL" \
+  --max_model_len 8192 \
+  --seed "$SEED"
+```
+
+Parameters
+- `--attacking_method`: Attack method to use
+- `--model_name`: OUTFOX dataset to use
+- `--detection_model`: Detection model to use
+- `--dataset`: Dataset for out-of-domain evaluation
+- `--max_model_len`: Maximum model context length (default: 8192)
+- `--seed`: Random seed for reproducibility
+
+## Enhancements
+
+Our implementation includes several key improvements over the original OUTFOX:
+
+1. Out-of-Domain Evaluation: Extended robustness assessment beyond the essay domain
+2. vLLM Integration: Replaced OpenAI API with vLLM for running models locally
+3. Batch Processing: Modified code flow to support batching for improved runtime performance
